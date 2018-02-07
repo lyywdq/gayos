@@ -30,13 +30,13 @@ KERNEL_CS equ 0x8
 KERNEL_DS equ 0x10
 KERNEL_DISPLAY equ 0x18
 
-
+;memory table address = 0x3000
 loader_start:
     mov si,message
     call fast_print_string
     call get_memory
 
-;¿ªA20
+;å¼€A20
 mov dx,0x92
 in al,dx
 or al,0000_0010B
@@ -44,7 +44,7 @@ out dx,al
 
 lgdt [gdt_ptr]
 
-;¿ªPE
+;å¼€PE
 mov eax,cr0
 or eax,0x1
 mov cr0,eax
@@ -99,7 +99,6 @@ get_memory:
 
     mov word [memory_table_size],di;
 
-
     ret;
 
     
@@ -126,15 +125,16 @@ p_mode_start:
     mov byte [gs:0x16],'C';
     mov byte [gs:0x18],'T';
 
-    mov esi,test_val;
-    mov edi,0;
-    call print_32
+    ;call print_32
 
+    call analysis_memory
     jmp $
+
+
 
 test_val dd 0x12345678
 ;esi value address
-;edi display address
+;edx display address
 print_32:
     mov ecx,0x4;
     .again:
@@ -144,32 +144,105 @@ print_32:
     shr ah,4;
     cmp ah,0xa;
     jb .v0
+    sub ah,0xa;
     add ah,'A';
     jmp .next
     .v0:
     add ah,'0';
     .next:
-    mov byte [gs:edi],ah;
-    inc edi;
-    inc edi;
+    mov byte [gs:edx],ah;
+    inc edx;
+    inc edx;
 
     mov ah,al;
     and ah,0x0f;
     cmp ah,0xa;
     jb .v02
+    sub ah,0xa;
     add ah,'A';
     jmp .next2
     .v02:
     add ah,'0';
     .next2:
-    mov byte [gs:edi],ah;
-    inc edi;
-    inc edi;
+    mov byte [gs:edx],ah;
+    inc edx;
+    inc edx;
 
     loop .again
     
     ret;
-    
 
 
+address: db "ADDRESS: ",0
+length: db ",LENGTH: ",0
+reserve: db ",RESERVE ",0
+usable: db ",USABLE ",0
 
+analysis_memory:
+    xor ecx,ecx;
+    mov ebx,0x30000;
+    mov edx,160;
+    .analysis:
+    mov eax,[memory_table_size]
+    and eax,0xffff;
+    cmp ecx,eax
+    jae .analysis_ret;
+
+    push ecx;
+    push edx;
+    mov esi,address;
+    call print_string;
+
+
+    mov esi,ebx;
+    call print_32;
+
+    mov esi,length;
+    call print_string;
+
+    add ebx,8;
+    mov esi,ebx;
+    call print_32;
+
+    add ebx,8;
+    mov eax,[ebx];
+    cmp eax,0x1;
+    jne .reserve
+    mov esi,usable;
+    jmp .print_flag
+    .reserve:
+    mov esi,reserve;
+    .print_flag:
+    call print_string;
+
+
+    pop edx;
+    pop ecx;
+    add edx,160;
+    add ecx,20;
+    add ebx,4;
+    jmp .analysis;
+
+    .analysis_ret:
+    ret;
+        
+
+
+;esi:address of string
+;edx:display address
+print_string:
+	mov al,0x20;
+print_char:
+	mov ah,[si];
+	cmp ah,0;
+	je print_ret
+	mov [gs:edx],ah;	
+	inc edx;
+	mov [gs:edx],al;
+	inc edx;
+
+	inc esi;
+	jmp print_char
+print_ret:
+    mov eax,edx
+	ret
